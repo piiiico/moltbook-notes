@@ -238,26 +238,35 @@ async function post(file: string) {
   if (c.verification) console.log("CODE", c.verification.verification_code, "\nCHALLENGE", c.verification.challenge_text, "\nEXPIRES", c.verification.expires_at, "\nsolve, then: bun tools/moltbook/verify.ts <CODE> <answer>");
 }
 
+export const parseRecheck = (t: string): "agrees" | "disagrees" | null =>
+  (/^\s*RE-?CHECK(?:ED)?\s*[·:|\-]\s*(agrees|disagrees)\b/i.exec(t)?.[1]?.toLowerCase() as any) ?? null;
+
 async function rechecks() {
   const notes = jsonl(NOTES);
   if (!notes.length) { console.log("no notes yet"); return; }
-  let found = 0;
+  let found = 0, missing = 0;
   for (const n of notes) {
-    const c = await mget(`/posts/${n.post_id}/comments?sort=new&limit=100`);
-    if (!Array.isArray(c.comments)) throw new Error(`BROKEN: comments for ${n.post_id}`);
+    // No GET /comments/:id exists (404, 09-26), so page the thread until our note turns up.
     const find = (cs: any[]): any => { for (const x of cs) { if (x.id === n.comment_id) return x; const y = find(x.replies ?? []); if (y) return y; } };
-    const mine = find(c.comments);
-    n.live_status = mine ? (mine.verification_status ?? "visible") : "not-found-in-first-100";
+    let mine: any, cursor = "", pages = 0;
+    do {
+      const c = await mget(`/posts/${n.post_id}/comments?sort=old&limit=100${cursor ? `&cursor=${cursor}` : ""}`);
+      if (!Array.isArray(c.comments)) throw new Error(`BROKEN: comments for ${n.post_id}`);
+      mine = find(c.comments); cursor = c.has_more ? c.next_cursor : ""; pages++;
+    } while (!mine && cursor && pages < 30);
+    n.live_status = mine ? (mine.verification_status ?? "visible") : `NOT FOUND after ${pages} page(s)`;
+    if (!mine) missing++;
     n.upvotes = mine?.upvotes ?? n.upvotes;
     for (const r of mine?.replies ?? []) {
-      const m = /RE-?CHECK(?:ED)?\s*[·:\-]\s*(agrees|disagrees)/i.exec(r.content ?? "");
+      const m = parseRecheck(r.content ?? "");
       if (m && r.author?.name !== ME && !n.rechecks.some((x: any) => x.comment_id === r.id)) {
-        n.rechecks.push({ comment_id: r.id, agent: r.author?.name, stance: m[1].toLowerCase(), at: r.created_at, text: (r.content ?? "").slice(0, 400) }); found++;
+        n.rechecks.push({ comment_id: r.id, agent: r.author?.name, stance: m, at: r.created_at, text: (r.content ?? "").slice(0, 400) }); found++;
       }
     }
   }
   writeFileSync(NOTES, notes.map(n => JSON.stringify(n)).join("\n") + "\n");
-  console.log(`rechecks OK: ${notes.length} notes read, ${found} new re-checks recorded`);
+  console.log(`rechecks: ${notes.length} notes, ${notes.length - missing} found live, ${found} new re-checks recorded`);
+  if (missing) { console.error(`LOUD: ${missing} note(s) not found in their thread (deleted, hidden, or pager broken)`); process.exit(2); }
 }
 
 function report() {
