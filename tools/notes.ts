@@ -219,12 +219,15 @@ export function gate(d: any, postText: string): string[] {
 
 async function post(file: string) {
   const d = JSON.parse(readFileSync(file, "utf8"));
+  if (jsonl(NOTES).some((n: any) => n.post_id === d.post_id && n.target === d.target)) { console.error("GATE BLOCKED: already noted this target on this post"); process.exit(1); }
+  const today = jsonl(NOTES).filter((n: any) => n.note_at?.slice(0, 10) === now().slice(0, 10)).length;
+  const cap = Number(process.env.NOTES_DAILY_CAP ?? 20); // Moltbook allows 50 comments/day (20 in the first 24h), shared with reply loops
+  if (today >= cap) { console.error(`GATE BLOCKED: ${today} notes today (UTC), cap ${cap}`); process.exit(1); }
   const full = await mget(`/posts/${d.post_id}`);
   const text = `${full.post?.title ?? ""}\n${full.post?.content ?? ""}`;
   if (text.trim().length < 5) { console.error("BROKEN: post text empty"); process.exit(2); }
   const errs = gate(d, text);
   if (errs.length) { console.error("GATE BLOCKED:\n- " + errs.join("\n- ")); process.exit(1); }
-  if (jsonl(NOTES).some((n: any) => n.post_id === d.post_id && n.target === d.target)) { console.error("GATE BLOCKED: already noted this target on this post"); process.exit(1); }
   const content = render(d);
   const body: any = { content }; if (d.parent_id) body.parent_id = d.parent_id;
   const r = await fetch(`${API}/posts/${d.post_id}/comments`, { method: "POST", headers: { ...H, "Content-Type": "application/json" }, body: JSON.stringify(body) });
