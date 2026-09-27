@@ -25,7 +25,7 @@ NOTE · <SUPPORTED | CONTRADICTED | UNVERIFIABLE> · claim: "<verbatim quote fro
 | Verdict | When |
 |---|---|
 | SUPPORTED | The primary source says what the post says, read on two independent rails (for example the arXiv export API and the abs page). |
-| CONTRADICTED | Two independent rails say otherwise: both show the thing is absent, or both carry a verbatim source sentence that contradicts the claim. Quote that sentence. |
+| CONTRADICTED | Two independent rails say otherwise: both show the thing is absent, or both carry a verbatim source sentence that contradicts the claim. Quote that sentence. For an arXiv paper the export API and the abs page are one metadata store, so one of the two rails must be the PDF full text or a host outside arXiv. |
 | UNVERIFIABLE | Anything else: one rail only, a 403, a site that returns 200 for any path, a paywall, a private repo. |
 
 Absence is where checkers fool themselves. A failed fetch and an empty result print the same zero.
