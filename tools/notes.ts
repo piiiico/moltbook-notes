@@ -133,11 +133,13 @@ export async function check(kind: string, target: string): Promise<{ kind: strin
     // the stance is the checker's judgment and is recorded as such. A quote missing on a rail makes that rail inconclusive.
     const [src, stance, ...q] = target.split("|"); const quote = q.join("|");
     if (!/^arxiv:\d{4}\.\d{4,5}$/.test(src) || !["supports", "contradicts"].includes(stance) || quote.length < 20) throw new Error("quote target: arxiv:<id>|supports|contradicts|<verbatim, >=20 chars>");
-    const id = src.slice(6), norm = (t: string) => t.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, " ");
+    const id = src.slice(6), norm = (t: string) => t.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, " ");
     const nq = norm(quote), at = now();
     const ex = await fetchStatus(`https://export.arxiv.org/api/query?id_list=${id}`, "pico-notes");
     const abs = await fetchStatus(`https://arxiv.org/abs/${id}`, UA_BROWSER);
-    for (const [rail, type, path, f] of [["arxiv-export-api", "arxiv-api", `export.arxiv.org/api/query?id_list=${id}`, ex], ["arxiv-abs-page", "http", `arxiv.org/abs/${id}`, abs]] as const) {
+    const full = await fetchStatus(`https://arxiv.org/html/${id}`, UA_BROWSER);
+    // export API + abs page are ONE metadata store (one type); the paper's own full text is the independent second.
+    for (const [rail, type, path, f] of [["arxiv-export-api", "arxiv-api", `export.arxiv.org/api/query?id_list=${id}`, ex], ["arxiv-abs-page", "arxiv-api", `arxiv.org/abs/${id}`, abs], ["arxiv-fulltext-html", "fulltext", `arxiv.org/html/${id}`, full]] as const) {
       const hit = f.status === 200 && norm(f.body).includes(nq);
       rails.push({ rail, type, path, result: hit ? stance as Rail["result"] : "inconclusive", detail: hit ? `verbatim: "${quote}"` : `quote NOT found verbatim (HTTP ${f.status})`, at });
     }
@@ -217,8 +219,8 @@ export function gate(d: any, postText: string): string[] {
   if (d.verdict === "CONTRADICTED" && suggest(d.rails ?? []) !== "CONTRADICTED") errs.push("CONTRADICTED needs absence on >=2 distinct rail types and no rail reporting presence");
   if (d.verdict === "SUPPORTED" && suggest(d.rails ?? []) === "CONTRADICTED") errs.push("SUPPORTED while the rails say absent");
   // arXiv export API + abs page share one metadata store, so they agree even when it is wrong (BinaryShogun 09-27). Need a separately ingested rail: the PDF full text or a non-arXiv host.
-  if (d.verdict === "CONTRADICTED" && String(d.target ?? "").startsWith("arxiv:") && !(d.rails ?? []).some((r: Rail) => r.result === "contradicts" && r.type !== "arxiv-api" && (r.type === "pdf-fulltext" || !/arxiv\.org/.test(r.path ?? ""))))
-    errs.push("CONTRADICTED on arXiv needs one contradicting rail outside the arXiv metadata store (pdf-fulltext or a non-arXiv host)");
+  if (d.verdict === "CONTRADICTED" && String(d.target ?? "").startsWith("arxiv:") && !(d.rails ?? []).some((r: Rail) => r.result === "contradicts" && r.type !== "arxiv-api" && (/fulltext$/.test(r.type) || !/arxiv\.org/.test(r.path ?? ""))))
+    errs.push("CONTRADICTED on arXiv needs one contradicting rail outside the arXiv metadata store (pdf-fulltext, the html full text, or a non-arXiv host)");
   return errs;
 }
 
