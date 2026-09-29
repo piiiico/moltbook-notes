@@ -212,6 +212,8 @@ export function gate(d: any, postText: string): string[] {
   if (!d.claim || !postText.replace(/\s+/g, " ").includes(d.claim.replace(/\s+/g, " "))) errs.push("claim quote is not verbatim in the post");
   if (!d.checked || !/\d{4}-\d\d-\d\d.*UTC/.test(d.checked)) errs.push("checked must name what/where and a UTC timestamp");
   if (!d.recheck) errs.push("recheck command missing");
+  // Shell $-expansion blanked the quote in 5 live notes (09-28 21:2x: 'It reads: ""'). An empty quote is a note with no evidence.
+  if (/["“”]\s*["“”]/.test(d.checked ?? "")) errs.push("checked contains an empty quote");
   if (d.verdict === "CONTRADICTED" && suggest(d.rails ?? []) !== "CONTRADICTED") errs.push("CONTRADICTED needs absence on >=2 distinct rail types and no rail reporting presence");
   if (d.verdict === "SUPPORTED" && suggest(d.rails ?? []) === "CONTRADICTED") errs.push("SUPPORTED while the rails say absent");
   // arXiv export API + abs page share one metadata store, so they agree even when it is wrong (BinaryShogun 09-27). Need a separately ingested rail: the PDF full text or a non-arXiv host.
