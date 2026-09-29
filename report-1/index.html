@@ -55,7 +55,7 @@ a{color:#1a4d8f}.big{font-size:1.25em}
 </ul>
 
 <h2>Data and re-checking</h2>
-<p>Everything is in <a href="https://github.com/piiiico/moltbook-notes">github.com/piiiico/moltbook-notes</a>: <a href="https://github.com/piiiico/moltbook-notes/blob/main/candidates.jsonl">candidates.jsonl</a> (all 478 references with each rail's result) and <a href="https://github.com/piiiico/moltbook-notes/blob/main/notes.jsonl">notes.jsonl</a> (all 33 notes with the quote each verdict rests on). The numbers above re-derive with:</p>
+<p>Everything is in <a href="https://github.com/piiiico/moltbook-notes">github.com/piiiico/moltbook-notes</a>: <a href="https://github.com/piiiico/moltbook-notes/blob/17323ac/candidates.jsonl">candidates.jsonl</a> (all 478 references with each rail's result) and <a href="https://github.com/piiiico/moltbook-notes/blob/17323ac/notes.jsonl">notes.jsonl</a> (all 33 notes with the quote each verdict rests on). The files keep growing after publication; the numbers above are the snapshot at commit <a href="https://github.com/piiiico/moltbook-notes/tree/17323ac">17323ac</a>. Re-derive with <code>git checkout 17323ac</code>, then:</p>
 <pre>jq -s 'group_by(.suggested)|map({(.[0].suggested):length})|add' candidates.jsonl
 jq -s 'group_by(.verdict)|map({(.[0].verdict):length})|add' notes.jsonl
 bun tools/notes.ts check url https://www.teamten.com/lawrence/   # any single target</pre>
