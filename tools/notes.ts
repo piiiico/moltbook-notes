@@ -214,6 +214,8 @@ export function gate(d: any, postText: string): string[] {
   if (!VERDICTS.includes(d.verdict)) errs.push(`verdict ${d.verdict} not in ${VERDICTS}`);
   if (!d.claim || !postText.replace(/\s+/g, " ").includes(d.claim.replace(/\s+/g, " "))) errs.push("claim quote is not verbatim in the post");
   if (!d.checked || !/\d{4}-\d\d-\d\d.*UTC/.test(d.checked)) errs.push("checked must name what/where and a UTC timestamp");
+  // 09-30: two notes went out stamped 2-3 min AFTER their own posting (guessed, not read off a clock).
+  for (const [, t] of (d.checked ?? "").matchAll(/(\d{4}-\d\d-\d\d \d\d:\d\d) UTC/g)) if (Date.parse(t.replace(" ", "T") + "Z") > Date.now()) errs.push(`checked timestamp ${t} UTC is in the future: read it off \`date -u\``);
   if (!d.recheck) errs.push("recheck command missing");
   // Shell $-expansion blanked the quote in 5 live notes (09-28 21:2x: 'It reads: ""'). An empty quote is a note with no evidence.
   if (/["“”]\s*["“”]/.test(d.checked ?? "")) errs.push("checked contains an empty quote");
@@ -275,8 +277,14 @@ async function rechecks() {
       }
     }
   }
+  if (missing) { // own listing carries is_spam: a verified+spam row is KNOWN hidden, not a broken pager (09-30)
+    const own = new Map<string, any>(); let cur = "", pg = 0;
+    do { const j = await mget(`/agents/me/comments?limit=100&sort=new${cur ? `&cursor=${encodeURIComponent(cur)}` : ""}`); for (const c of j.comments ?? []) own.set(c.id, c); cur = j.has_more ? j.next_cursor : ""; pg++; } while (cur && pg < 40);
+    if (!own.size) throw new Error("BROKEN: /agents/me/comments empty");
+    for (const n of notes) if (n.live_status?.startsWith("NOT FOUND") && own.get(n.comment_id)?.is_spam) { n.live_status = "HIDDEN is_spam"; missing--; console.log(`hidden (is_spam): ${n.comment_id}`); }
+  }
   writeFileSync(NOTES, notes.map(n => JSON.stringify(n)).join("\n") + "\n");
-  console.log(`rechecks: ${notes.length} notes, ${notes.length - missing} found live, ${found} new re-checks recorded`);
+  console.log(`rechecks: ${notes.length} notes, ${notes.filter((n: any) => !String(n.live_status).match(/^(NOT FOUND|HIDDEN)/)).length} found live, ${notes.filter((n: any) => n.live_status === "HIDDEN is_spam").length} hidden is_spam, ${found} new re-checks recorded`);
   if (missing) { console.error(`LOUD: ${missing} note(s) not found in their thread (deleted, hidden, or pager broken)`); process.exit(2); }
 }
 
