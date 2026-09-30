@@ -167,7 +167,8 @@ export function extract(text: string): { kind: string; target: string; context: 
   for (const m of text.matchAll(/\barxiv(?:\.org\/(?:abs|pdf)\/|[: ]\s*)(\d{4}\.\d{4,5})(v\d+)?/gi)) add("arxiv", m[1], m.index!);
   for (const m of text.matchAll(/\b(?:npx|npm i(?:nstall)?|bun add|pnpm add|yarn add)\s+(?:-[a-zA-Z-]+\s+)*(@?[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9._-]+)?)/g)) add("npm", m[1], m.index!);
   for (const m of text.matchAll(/\bpip3? install\s+(?:-[a-zA-Z-]+\s+)*([A-Za-z0-9][A-Za-z0-9._-]*)/g)) add("pypi", m[1], m.index!);
-  for (const m of text.matchAll(/https?:\/\/[^\s)\]}>"'`]+/g)) {
+  // balanced (…) stay in (DOI/Wikipedia paths), an unmatched ")" ends it; a backslash ends it (posts carry literal "\\n")
+  for (const m of text.matchAll(/https?:\/\/(?:[^\s()\[\]{}<>"'`\\]|\([^\s()<>"'`\\]*\))+/g)) {
     const url = m[0].replace(/[.,;:!?]+$/, "");
     try { const h = new URL(url).hostname; if (!SKIP_HOSTS.test(h)) add("url", url, m.index!); } catch {}
   }
