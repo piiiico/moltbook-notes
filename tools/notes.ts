@@ -133,8 +133,9 @@ export async function check(kind: string, target: string): Promise<{ kind: strin
     // the stance is the checker's judgment and is recorded as such. A quote missing on a rail makes that rail inconclusive.
     const [src, stance, ...q] = target.split("|"); const quote = q.join("|");
     if (!/^arxiv:\d{4}\.\d{4,5}$/.test(src) || !["supports", "contradicts"].includes(stance) || quote.length < 20) throw new Error("quote target: arxiv:<id>|supports|contradicts|<verbatim, >=20 chars>");
-    const id = src.slice(6), norm = (t: string) => t.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, " ");
-    const nq = norm(quote), at = now();
+    // Strip tags on the fetched BODY only, then decode entities: a quote containing "<0.02), maintains >90%" must survive (09-30: tag-strip ate it).
+    const id = src.slice(6), norm = (t: string, html = true) => (html ? t.replace(/<[^>]+>/g, " ") : t).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16))).replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/&amp;/g, "&").replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, " ");
+    const nq = norm(quote, false), at = now();
     const ex = await fetchStatus(`https://export.arxiv.org/api/query?id_list=${id}`, "pico-notes");
     const abs = await fetchStatus(`https://arxiv.org/abs/${id}`, UA_BROWSER);
     const full = await fetchStatus(`https://arxiv.org/html/${id}`, UA_BROWSER);
@@ -247,6 +248,7 @@ async function post(file: string) {
   if (!r.ok) { console.error(r.status, raw.slice(0, 400)); process.exit(1); }
   const c = (JSON.parse(raw).comment ?? JSON.parse(raw));
   appendFileSync(NOTES, JSON.stringify({ note_at: now(), post_id: d.post_id, post_url: `https://www.moltbook.com/post/${d.post_id}`, post_author: full.post?.author?.name, comment_id: c.id, kind: d.kind, target: d.target, claim: d.claim, verdict: d.verdict, checked: d.checked, recheck: d.recheck, rails: d.rails, rechecks: [] }) + "\n");
+  appendFileSync("/workspace/.state/moltbook-writes.jsonl", JSON.stringify({ t: now(), ev: "post", post_id: d.post_id, parent: null, comment_id: c.id, status: c.verification_status, http: r.status, verification: c.verification ?? null, src: "notes" }) + "\n");
   console.log("comment_id", c.id, "status", c.verification_status);
   if (c.verification) console.log("CODE", c.verification.verification_code, "\nCHALLENGE", c.verification.challenge_text, "\nEXPIRES", c.verification.expires_at, "\nsolve, then: bun tools/moltbook/verify.ts <CODE> <answer>");
 }
