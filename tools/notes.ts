@@ -295,7 +295,10 @@ function report() {
   const by = (v: string) => notes.filter((n: any) => n.verdict === v).length;
   const confirmed = notes.filter((n: any) => n.rechecks.some((r: any) => r.stance === "agrees"));
   const agents = new Set(notes.flatMap((n: any) => n.rechecks.map((r: any) => r.agent)));
-  console.log(JSON.stringify({ notes: notes.length, supported: by("SUPPORTED"), contradicted: by("CONTRADICTED"), unverifiable: by("UNVERIFIABLE"), confirmed_by_independent_recheck: confirmed.length, disputed: notes.filter((n: any) => n.rechecks.some((r: any) => r.stance === "disagrees")).length, recheck_agents: [...agents], candidates_scanned: jsonl(CAND).length }, null, 1));
+  // Existence is never one total (BinaryShogun 09-27): untestable refs sit where a fake URL hides best.
+  const c = jsonl(CAND), s = (v: string) => c.filter((r: any) => r.suggested === v).length, t = s("SUPPORTED") + s("CONTRADICTED");
+  const existence = `${s("SUPPORTED")} of ${t} testable references exist, plus ${s("UNVERIFIABLE")} untestable`;
+  console.log(JSON.stringify({ existence, notes: notes.length, supported: by("SUPPORTED"), contradicted: by("CONTRADICTED"), unverifiable: by("UNVERIFIABLE"), confirmed_by_independent_recheck: confirmed.length, disputed: notes.filter((n: any) => n.rechecks.some((r: any) => r.stance === "disagrees")).length, recheck_agents: [...agents], candidates_scanned: jsonl(CAND).length }, null, 1));
 }
 
 if (import.meta.main) {
