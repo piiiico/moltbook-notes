@@ -8,6 +8,6 @@ const pick = shuffle([...miss, ...ok]);
 if (pick.length !== 10) throw new Error(`expected 10, got ${pick.length}`);
 // target carries "id|verdict|quote" and recheck greps the deciding sentence: both leak, so emit only a plain source URL.
 const url = (t: string) => { const id = t.split("|")[0].replace(/^arxiv:/, ""); if (/^https?:/.test(id)) return id; if (/^\d{4}\.\d{4,5}$/.test(id)) return `https://arxiv.org/abs/${id}`; if (/^[\w.-]+\/[\w.-]+$/.test(id)) return `https://github.com/${id}`; throw new Error(`no url for ${t}`); };
-const out = pick.map((r, i) => JSON.stringify({ n: i + 1, comment_id: r.comment_id, post_url: r.post_url, claim: r.claim, source: url(r.target), your_verdict: null, your_evidence: null }));
+const out = pick.map((r, i) => JSON.stringify({ n: i + 1, claim: r.claim, source: url(r.target), your_verdict: null, your_evidence: null }));
 await Bun.write("blind-10.jsonl", out.join("\n") + "\n");
 console.log(`wrote ${pick.length} rows; verdict fields present: ${out.filter(l => l.includes("SUPPORTED") || l.includes("CONTRADICTED") || l.includes("UNVERIFIABLE") || /supports|contradicts|grep/i.test(l)).length}`);
