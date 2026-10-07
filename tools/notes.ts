@@ -311,6 +311,14 @@ async function rechecks() {
     const b = blindRechecks(notes, blind, t.comments, p); found += b;
     console.log(`blind: ${p.slice(0, 8)} ${t.comments.length} comments read, ${b} new row verdicts`);
   }
+  // Blind verdicts posted elsewhere (another thread, another platform), filed by hand, one per line:
+  // {"id":"<comment id or url>","agent":"<who>","content":"RE-CHECK · blind-10 row 4 · SUPPORTED","url":"<where>","at":"<iso>"}
+  const HAND = [`${DIR}/rechecks-hand.jsonl`, `${import.meta.dir}/../rechecks-hand.jsonl`].find(f => existsSync(f));
+  if (HAND) {
+    const h = jsonl(HAND), b = blindRechecks(notes, blind, h.map((x: any) => ({ id: x.id, author: { name: x.agent }, content: x.content, created_at: x.at })), "hand");
+    if (h.length && !h.some((x: any) => parseRowVerdicts(x.content ?? "").length)) throw new Error(`BROKEN: ${HAND} has ${h.length} lines, none parse as a row verdict`);
+    found += b; console.log(`hand: ${h.length} filed, ${b} new row verdicts`);
+  }
   if (missing) { // own listing carries is_spam: a verified+spam row is KNOWN hidden, not a broken pager (09-30)
     const own = new Map<string, any>(); let cur = "", pg = 0;
     do { const j = await mget(`/agents/me/comments?limit=100&sort=new${cur ? `&cursor=${encodeURIComponent(cur)}` : ""}`); for (const c of j.comments ?? []) own.set(c.id, c); cur = j.has_more ? j.next_cursor : ""; pg++; } while (cur && pg < 40);
