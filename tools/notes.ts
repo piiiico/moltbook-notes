@@ -263,9 +263,9 @@ export const parseRecheck = (t: string, ours?: string): Stance | null => {
   if (!m) return null;
   return /^(agrees|disagrees)$/i.test(m) ? m.toLowerCase() as Stance : stanceOf(m.toUpperCase(), ours);
 };
-// Blind re-checks: "row N: <VERDICT>" on its own line, anywhere in the reply, one or more rows.
+// Blind re-checks: "row N: <VERDICT>" or "RE-CHECK · blind-10 row N · <VERDICT>" (the form offered in 86f0584b) on its own line, anywhere in the reply, one or more rows.
 export const parseRowVerdicts = (t: string): { row: number; verdict: Verdict }[] =>
-  [...t.matchAll(/^\s*(?:RE-?CHECK(?:ED)?\s*[·:|\-]\s*)?row\s*#?(\d+)\s*[:·\-–—]\s*(SUPPORTED|CONTRADICTED|UNVERIFIABLE)\b/gim)]
+  [...t.matchAll(/^\s*(?:RE-?CHECK(?:ED)?\s*[·:|\-]\s*)?(?:blind-?10\s+)?row\s*(?:n\s*=\s*)?#?(\d+)\s*[:·\-–—]\s*(SUPPORTED|CONTRADICTED|UNVERIFIABLE)\b/gim)]
     .map(m => ({ row: Number(m[1]), verdict: m[2].toUpperCase() as Verdict }));
 // The post blind-10 was offered on; row n maps to a note by claim text (blind-10 carries no comment_id since 8d810c9).
 export const BLIND_POSTS = ["2d55d20a-b032-4fe7-80e4-41e48b057441"];
