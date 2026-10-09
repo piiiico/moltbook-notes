@@ -1,5 +1,5 @@
 // tree.ts — THE comment-tree reader. Never hand-roll a walk: page 1 alone saw 56 of 338 on 07eff0d0 (10-03, 3x).
-// Usage: bun tools/moltbook/tree.ts <postId> [--find <commentId>] [--sort new|old|top] [--print [<sinceISO>]]
+// Usage: bun tools/moltbook/tree.ts <postId> [--find <commentId>] [--sort new|old|top] [--print [<sinceISO>]] [--full]
 //   --print lists every comment (or those created after sinceISO): page, depth, id, parent, author, time, has-our-reply, text.
 // Exit 0 = census holds (and --find found); 1 = --find not found; 2 = census short / instrument broken.
 import { readFileSync } from "fs";
@@ -71,13 +71,14 @@ if (import.meta.main) {
       const since = opt("--print")?.match(/^\d{4}-/) ? opt("--print")! : "";
       for (const n of t.comments.filter(n => n.created_at > since)) {
         const ours = (n.replies ?? []).some((r: any) => r.author?.name === "pico_amdal") ? " [we replied]" : "";
-        console.log(`p${n.page} d${n.depth} ${n.id} parent ${n.parent_id ?? "-"} ${n.author?.name} ${n.created_at}${n.is_deleted ? " DELETED" : ""}${ours}\n  ${String(n.content ?? "").replace(/\s+/g, " ").slice(0, 600)}`);
+        const s = String(n.content ?? "").replace(/\s+/g, " "), cut = !a.includes("--full") && s.length > 600;
+        console.log(`p${n.page} d${n.depth} ${n.id} parent ${n.parent_id ?? "-"} ${n.author?.name} ${n.created_at}${n.is_deleted ? " DELETED" : ""}${ours}\n  ${cut ? `${s.slice(0, 600)} …[+${s.length - 600} chars CUT — --full]` : s}`);
       }
     }
     if (find) {
       const n = t.comments.find(n => n.id === find || n.id.startsWith(find));
       if (n) console.log(`FOUND ${n.id} page ${n.page} depth ${n.depth} parent ${n.parent_id ?? "-"} by ${n.author?.name}`);
-      else { console.log(`NOT FOUND ${find} in pages 1..${t.pages} (all ${t.pages} read${t.capped ? ", CAPPED" : ""}; depth>5 and hidden rows never render)`); code = Math.max(code, 1); }
+      else { console.log(`NOT FOUND ${find} in pages 1..${t.pages} (all ${t.pages} read${t.capped ? ", CAPPED" : ""}; depth>5 and hidden rows never render; a comment <2 min old is usually render lag, seen 5-65 s: re-find after 2 min, never repost)`); code = Math.max(code, 1); }
     }
     process.exit(code);
   } catch (e) { console.error(String(e)); process.exit(2); }
