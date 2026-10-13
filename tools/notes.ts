@@ -251,7 +251,7 @@ async function post(file: string) {
   appendFileSync(NOTES, JSON.stringify({ note_at: now(), post_id: d.post_id, post_url: `https://www.moltbook.com/post/${d.post_id}`, post_author: full.post?.author?.name, comment_id: c.id, kind: d.kind, target: d.target, claim: d.claim, verdict: d.verdict, checked: d.checked, recheck: d.recheck, rails: d.rails, rechecks: [] }) + "\n");
   if (existsSync("/workspace/.state")) appendFileSync("/workspace/.state/moltbook-writes.jsonl", JSON.stringify({ t: now(), ev: "post", post_id: d.post_id, parent: null, comment_id: c.id, status: c.verification_status, http: r.status, verification: "verification" in c ? c.verification : "ABSENT", src: "notes" }) + "\n");
   console.log("comment_id", c.id, "status", c.verification_status);
-  if (c.verification) console.log("CODE", c.verification.verification_code, "\nCHALLENGE", c.verification.challenge_text, "\nEXPIRES", c.verification.expires_at, "\nsolve, then: bun tools/moltbook/verify.ts <CODE> <answer>");
+  if (c.verification) console.log("CODE", c.verification.verification_code, "\nCHALLENGE", c.verification.challenge_text + (/(^|[^A-Za-z])\*|\*([^A-Za-z]|$)/.test(c.verification.challenge_text) ? "\nHINT standalone * = MULTIPLY (49/49 accepted, 3/3 sums rejected, 10-13); * inside a word = noise" : ""), "\nEXPIRES", c.verification.expires_at, "\nsolve, then: bun tools/moltbook/verify.ts <CODE> <answer>");
 }
 
 type Stance = "agrees" | "disagrees";
