@@ -330,15 +330,24 @@ async function rechecks() {
   if (missing) { console.error(`LOUD: ${missing} note(s) not found in their thread (deleted, hidden, or pager broken)`); process.exit(2); }
 }
 
+// Pooling existence checks with quote-entailment checks hides which kind fails (bariyaw 10-09): split by kind, sum must equal the total.
+export function reportStats(notes: any[], cand: any[]) {
+  const tally = (rows: any[]) => ({ notes: rows.length, supported: rows.filter(n => n.verdict === "SUPPORTED").length, contradicted: rows.filter(n => n.verdict === "CONTRADICTED").length, unverifiable: rows.filter(n => n.verdict === "UNVERIFIABLE").length });
+  const quote = notes.filter(n => n.kind === "quote"), existence = notes.filter(n => n.kind !== "quote");
+  const by_kind = { existence_only: { kinds: [...new Set(existence.map(n => n.kind))].sort(), ...tally(existence) }, quote_entailment: tally(quote) };
+  if (by_kind.existence_only.notes + by_kind.quote_entailment.notes !== notes.length) throw new Error("BROKEN: per-kind split does not sum to total");
+  // Existence is never one total (BinaryShogun 09-27): untestable refs sit where a fake URL hides best.
+  const s = (v: string) => cand.filter(r => r.suggested === v).length, t = s("SUPPORTED") + s("CONTRADICTED");
+  return { existence: `${s("SUPPORTED")} of ${t} testable references exist, plus ${s("UNVERIFIABLE")} untestable`, ...tally(notes), by_kind,
+    selection_caveat: "only posts carrying an extractable reference (url/github/arxiv/quote) become candidates; these rates describe referenced claims, not posts in general",
+    confirmed_by_independent_recheck: notes.filter(n => n.rechecks.some((r: any) => r.stance === "agrees")).length, disputed: notes.filter(n => n.rechecks.some((r: any) => r.stance === "disagrees")).length,
+    recheck_agents: [...new Set(notes.flatMap(n => n.rechecks.map((r: any) => r.agent)))], candidates_scanned: cand.length };
+}
+
 function report() {
   const notes = jsonl(NOTES);
-  const by = (v: string) => notes.filter((n: any) => n.verdict === v).length;
-  const confirmed = notes.filter((n: any) => n.rechecks.some((r: any) => r.stance === "agrees"));
-  const agents = new Set(notes.flatMap((n: any) => n.rechecks.map((r: any) => r.agent)));
-  // Existence is never one total (BinaryShogun 09-27): untestable refs sit where a fake URL hides best.
-  const c = jsonl(CAND), s = (v: string) => c.filter((r: any) => r.suggested === v).length, t = s("SUPPORTED") + s("CONTRADICTED");
-  const existence = `${s("SUPPORTED")} of ${t} testable references exist, plus ${s("UNVERIFIABLE")} untestable`;
-  console.log(JSON.stringify({ existence, notes: notes.length, supported: by("SUPPORTED"), contradicted: by("CONTRADICTED"), unverifiable: by("UNVERIFIABLE"), confirmed_by_independent_recheck: confirmed.length, disputed: notes.filter((n: any) => n.rechecks.some((r: any) => r.stance === "disagrees")).length, recheck_agents: [...agents], candidates_scanned: jsonl(CAND).length }, null, 1));
+  if (!notes.length) { console.error("LOUD: notes.jsonl empty"); process.exit(2); }
+  console.log(JSON.stringify(reportStats(notes, jsonl(CAND)), null, 1));
 }
 
 if (import.meta.main) {
