@@ -17,8 +17,8 @@ const ME = "pico_amdal";
 const SECRETS = "/workspace/.secrets/moltbook.env";
 const KEY = process.env.MOLTBOOK_API_KEY ?? (existsSync(SECRETS) ? readFileSync(SECRETS, "utf8").match(/^MOLTBOOK_API_KEY=(.*)$/m)?.[1] : undefined);
 const H: Record<string, string> = KEY ? { Authorization: `Bearer ${KEY}` } : {};
-const UA_BROWSER = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36";
-const UA_BOT = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
+// Declared identity only, never a browser/crawler costume (my-prompt NN#1, 10-19).
+const UA = "Pico/1.0 (AI agent; +https://github.com/piiiico)";
 export const VERDICTS = ["SUPPORTED", "CONTRADICTED", "UNVERIFIABLE"] as const;
 type Verdict = typeof VERDICTS[number];
 export type Rail = { rail: string; type: string; path: string; result: "present" | "absent" | "inconclusive" | "supports" | "contradicts"; detail: string; at: string };
@@ -59,21 +59,20 @@ async function doh(resolver: "cloudflare" | "google", name: string): Promise<Rai
 async function httpRail(url: string): Promise<Rail[]> {
   const at = now();
   const u = new URL(url);
-  const [b, g] = await Promise.all([fetchStatus(url, UA_BROWSER), fetchStatus(url, UA_BOT)]);
+  const b = await fetchStatus(url, UA);
   const out: Rail[] = [];
   const isPath = u.pathname !== "/" && u.pathname !== "";
   const judge = (s: number) => s >= 200 && s < 400 ? "present" : (s === 404 || s === 410) ? "absent" : "inconclusive";
-  let rb = judge(b.status) as Rail["result"], rg = judge(g.status) as Rail["result"];
+  let rb = judge(b.status) as Rail["result"];
   let ctrl = "";
-  if (isPath && (rb === "present" || rg === "present")) {
-    const c = await fetchStatus(`${u.origin}/pico-notes-control-${Math.random().toString(36).slice(2, 10)}`, UA_BROWSER);
+  if (isPath && rb === "present") {
+    const c = await fetchStatus(`${u.origin}/pico-notes-control-${Math.random().toString(36).slice(2, 10)}`, UA);
     ctrl = `; control random path -> ${c.status} len ${c.len}`;
-    if (c.status >= 200 && c.status < 400) { rb = rb === "present" ? "inconclusive" : rb; rg = rg === "present" ? "inconclusive" : rg; ctrl += " (host answers 200 to anything: soft-404, 200 is not evidence)"; }
+    if (c.status >= 200 && c.status < 400) { rb = "inconclusive"; ctrl += " (host answers 200 to anything: soft-404, 200 is not evidence)"; }
   }
-  if (b.status === 0 && g.status === 0) out.push({ rail: "http", type: "http", path: url, result: "absent", detail: `no connection (${b.body.slice(0, 80)})`, at });
+  if (b.status === 0) out.push({ rail: "http", type: "http", path: url, result: "absent", detail: `no connection (${b.body.slice(0, 80)})`, at });
   else {
-    out.push({ rail: "http-browser-ua", type: "http", path: url, result: rb, detail: `HTTP ${b.status} len ${b.len}${ctrl}`, at });
-    out.push({ rail: "http-googlebot-ua", type: "http", path: url, result: rg, detail: `HTTP ${g.status} len ${g.len}`, at });
+    out.push({ rail: "http", type: "http", path: url, result: rb, detail: `HTTP ${b.status} len ${b.len}${ctrl}`, at });
   }
   return out;
 }
@@ -101,7 +100,7 @@ export async function check(kind: string, target: string): Promise<{ kind: strin
     let adetail = `HTTP ${api?.status ?? 0}`;
     if (api?.status === 200) { const j: any = await api.json(); adetail += ` full_name=${j.full_name} stars=${j.stargazers_count} created=${j.created_at?.slice(0, 10)} pushed=${j.pushed_at?.slice(0, 10)}${j.archived ? " ARCHIVED" : ""}`; }
     rails.push({ rail: "github-api", type: "github-api", path: `api.github.com/repos/${o}/${r}`, result: ares as Rail["result"], detail: adetail, at });
-    const w = await fetchStatus(`https://github.com/${o}/${r}`, UA_BROWSER);
+    const w = await fetchStatus(`https://github.com/${o}/${r}`, UA);
     rails.push({ rail: "github-web", type: "http", path: `github.com/${o}/${r}`, result: (w.status === 200 ? "present" : w.status === 404 ? "absent" : "inconclusive"), detail: `HTTP ${w.status}`, at });
     recheck = `curl -s -o /dev/null -w '%{http_code}' https://api.github.com/repos/${o}/${r}`;
   } else if (kind === "arxiv") {
@@ -110,7 +109,7 @@ export async function check(kind: string, target: string): Promise<{ kind: strin
     const title = ex.body.match(/<entry>[\s\S]*?<title>([\s\S]*?)<\/title>/)?.[1]?.replace(/\s+/g, " ").trim();
     const err = /<title>Error<\/title>/.test(ex.body) || /incorrect id format/i.test(ex.body);
     rails.push({ rail: "arxiv-export-api", type: "arxiv-api", path: `export.arxiv.org/api/query?id_list=${target}`, result: ex.status === 200 && title && !err ? "present" : ex.status === 200 && !title ? "absent" : "inconclusive", detail: title ? `title="${title}"` : `HTTP ${ex.status} no entry`, at });
-    const abs = await fetchStatus(`https://arxiv.org/abs/${target}`, UA_BROWSER);
+    const abs = await fetchStatus(`https://arxiv.org/abs/${target}`, UA);
     rails.push({ rail: "arxiv-abs-page", type: "http", path: `arxiv.org/abs/${target}`, result: abs.status === 200 ? "present" : abs.status === 404 ? "absent" : "inconclusive", detail: `HTTP ${abs.status}`, at });
     recheck = `https://arxiv.org/abs/${target}`;
   } else if (kind === "npm") {
@@ -119,7 +118,7 @@ export async function check(kind: string, target: string): Promise<{ kind: strin
     let d = `HTTP ${reg.status}`;
     if (reg.status === 200) { try { const j = JSON.parse(reg.body); d += ` latest=${j["dist-tags"]?.latest} created=${j.time?.created?.slice(0, 10)}`; } catch {} }
     rails.push({ rail: "npm-registry", type: "npm-registry", path: `registry.npmjs.org/${target}`, result: reg.status === 200 ? "present" : reg.status === 404 ? "absent" : "inconclusive", detail: d, at });
-    const cdn = await fetchStatus(`https://unpkg.com/${target}/package.json`, UA_BROWSER);
+    const cdn = await fetchStatus(`https://unpkg.com/${target}/package.json`, UA);
     rails.push({ rail: "unpkg-cdn", type: "cdn", path: `unpkg.com/${target}/package.json`, result: cdn.status === 200 ? "present" : cdn.status === 404 ? "absent" : "inconclusive", detail: `HTTP ${cdn.status}`, at });
     recheck = `npm view ${target} version`;
   } else if (kind === "pypi") {
@@ -138,8 +137,8 @@ export async function check(kind: string, target: string): Promise<{ kind: strin
     const id = src.slice(6), norm = (t: string, html = true) => (html ? t.replace(/<[^>]+>/g, " ") : t).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16))).replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/&amp;/g, "&").replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, " ");
     const nq = norm(quote, false), at = now();
     const ex = await fetchStatus(`https://export.arxiv.org/api/query?id_list=${id}`, "pico-notes");
-    const abs = await fetchStatus(`https://arxiv.org/abs/${id}`, UA_BROWSER);
-    const full = await fetchStatus(`https://arxiv.org/html/${id}`, UA_BROWSER);
+    const abs = await fetchStatus(`https://arxiv.org/abs/${id}`, UA);
+    const full = await fetchStatus(`https://arxiv.org/html/${id}`, UA);
     // export API + abs page are ONE metadata store (one type); the paper's own full text is the independent second.
     for (const [rail, type, path, f] of [["arxiv-export-api", "arxiv-api", `export.arxiv.org/api/query?id_list=${id}`, ex], ["arxiv-abs-page", "arxiv-api", `arxiv.org/abs/${id}`, abs], ["arxiv-fulltext-html", "fulltext", `arxiv.org/html/${id}`, full]] as const) {
       const hit = f.status === 200 && norm(f.body).includes(nq);
